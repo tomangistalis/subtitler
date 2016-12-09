@@ -28,12 +28,12 @@ class OpenSubtitlesClient: NSObject {
     fileprivate var userAgent: String
     fileprivate var lang: String
     fileprivate var token: String = ""
-    
+
     init(userAgent: String, lang: String) {
         self.userAgent = userAgent
         self.lang = lang
     }
-    
+
     func login(_ onComplete: @escaping (Result<String>) -> Void) {
         self.request(.LogIn, ["", "", self.lang, self.userAgent], onComplete: { response in
             switch response.result {
@@ -50,15 +50,43 @@ class OpenSubtitlesClient: NSObject {
             }
         })
     }
-    
+
     func searchSubtitle(_ hash: String, _ size: UInt64, _ lang: String, onComplete: @escaping (Result<String>) -> Void) {
         if self.token == "" {
             onComplete(Result.failure(OpenSubtitlesError.notLoggedIn))
             return
         }
-        
+
         let params: [String: Any] = ["moviehash": hash, "moviesize": size]
 
+        self.request(.SearchSubtitles, [self.token, [params]], onComplete: { response in
+            switch response.result {
+            case .success(let node):
+                let status = self.status(node)
+                if status.success {
+                    let data = node[0]["data"]
+                    if let link = self.findSubtitle(data, lang) {
+                        onComplete(Result.success(link))
+                        return
+                    }
+
+                    onComplete(Result.failure(OpenSubtitlesError.empty))
+                } else {
+                    onComplete(Result.failure(OpenSubtitlesError.statusError(status.msg)))
+                }
+            case .failure(let error):
+                onComplete(Result.failure(OpenSubtitlesError.requestError(error as NSError)))
+            }
+        })
+    }
+
+    func searchTVSubtitle(title: String, season: String, episode: String, _ lang: String, onComplete: @escaping (Result<String>) -> Void) {
+        if self.token == "" {
+            onComplete(Result.failure(OpenSubtitlesError.notLoggedIn))
+            return
+        }
+
+        let params: [String: Any] = ["query": title, "season": Int(season)!, "episode": Int(episode)!, "sublanguageid": lang]
         self.request(.SearchSubtitles, [self.token, [params]], onComplete: { response in
             switch response.result {
             case .success(let node):

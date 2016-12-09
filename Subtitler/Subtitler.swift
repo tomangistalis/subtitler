@@ -84,6 +84,18 @@ open class Subtitler: NSObject {
         }
     }
 
+    private func retrySearchSubtitles(path: String, title:String, season: String, episode: String, _ lang: String, _ onComplete: @escaping (Result<String>) -> Void) {
+        self.client.searchTVSubtitle(title: title, season: season, episode: episode, lang) { result in
+            switch result {
+            case .success(let url):
+                let finalPath = subtitlesPath(path)
+                self.downloadSubtitlesFile(url, finalPath, onComplete)
+            case .failure(let error):
+                onComplete(Result.failure(SubtitlerError.clientError(error as! OpenSubtitlesError)))
+            }
+        }
+    }
+
     open func download(_ path: String, onComplete: @escaping (Result<String>) -> Void) {
         download(path, lang: self.lang, onComplete: onComplete)
     }
@@ -99,6 +111,20 @@ open class Subtitler: NSObject {
             }
         } else {
             self.searchSubtitles(path, lang, onComplete)
+        }
+    }
+
+    public func retry(path: String, title:String, season: String, episode: String, lang: String, onComplete: @escaping (Result<String>) -> Void) {
+        if !self.loggedIn {
+            self.login { err in
+                if let error = err {
+                    onComplete(Result.failure(SubtitlerError.clientError(error)))
+                } else {
+                    self.retrySearchSubtitles(path: path, title: title, season: season, episode: episode, lang, onComplete)
+                }
+            }
+        } else {
+            self.retrySearchSubtitles(path: path, title: title, season: season, episode: episode, lang, onComplete)
         }
     }
 }
