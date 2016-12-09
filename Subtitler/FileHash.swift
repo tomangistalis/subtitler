@@ -7,31 +7,31 @@ public struct FileHash {
     var size: UInt64
 }
 
-private func applyChunk(hash: UInt64, chunk: NSData) -> UInt64 {
+private func applyChunk(_ hash: UInt64, chunk: Data) -> UInt64 {
     let bytes = UnsafeBufferPointer<UInt64>(
-        start: UnsafePointer(chunk.bytes),
-        count: chunk.length / sizeof(UInt64)
+        start: (chunk as NSData).bytes.bindMemory(to: UInt64.self, capacity: chunk.count),
+        count: chunk.count / MemoryLayout<UInt64>.size
     )
 
-    return bytes.reduce(hash, combine: &+)
+    return bytes.reduce(hash, &+)
 }
 
-private func getChunk(f: NSFileHandle, start: UInt64) -> NSData {
-    f.seekToFileOffset(start)
-    return f.readDataOfLength(chunkSize)
+private func getChunk(_ f: FileHandle, start: UInt64) -> Data {
+    f.seek(toFileOffset: start)
+    return f.readData(ofLength: chunkSize)
 }
 
-private func hexHash(hash: UInt64) -> String {
+private func hexHash(_ hash: UInt64) -> String {
     return String(format:"%qx", hash)
 }
 
-private func fileSize(f: NSFileHandle) -> UInt64 {
+private func fileSize(_ f: FileHandle) -> UInt64 {
     f.seekToEndOfFile()
     return f.offsetInFile
 }
 
-public func fileHash(path: String) -> FileHash? {
-    if let f = NSFileHandle(forReadingAtPath: path) {
+public func fileHash(_ path: String) -> FileHash? {
+    if let f = FileHandle(forReadingAtPath: path) {
         let size = fileSize(f)
         if size < UInt64(chunkSize) {
             return nil

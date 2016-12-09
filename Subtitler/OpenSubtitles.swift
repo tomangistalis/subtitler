@@ -8,10 +8,10 @@ private enum Method: String {
     case LogIn, SearchSubtitles
 }
 
-public enum OpenSubtitlesError: ErrorType {
-    case NotLoggedIn, Empty
-    case RequestError(_: NSError)
-    case StatusError(_: String)
+public enum OpenSubtitlesError: Error {
+    case notLoggedIn, empty
+    case requestError(_: NSError)
+    case statusError(_: String)
 }
 
 private struct Status {
@@ -25,62 +25,63 @@ private struct Status {
 }
 
 class OpenSubtitlesClient: NSObject {
-    private var userAgent: String
-    private var lang: String
-    private var token: String = ""
+    fileprivate var userAgent: String
+    fileprivate var lang: String
+    fileprivate var token: String = ""
     
     init(userAgent: String, lang: String) {
         self.userAgent = userAgent
         self.lang = lang
     }
     
-    func login(onComplete: Result<String, OpenSubtitlesError> -> Void) {
+    func login(_ onComplete: @escaping (Result<String>) -> Void) {
         self.request(.LogIn, ["", "", self.lang, self.userAgent], onComplete: { response in
             switch response.result {
-            case .Success(let node):
+            case .success(let node):
                 let status = self.status(node)
                 if status.success {
                     self.token = node[0]["token"].string!
-                    onComplete(Result.Success(self.token))
+                    onComplete(Result.success(self.token))
                 } else {
-                    onComplete(Result.Failure(OpenSubtitlesError.StatusError(status.msg)))
+                    onComplete(Result.failure(OpenSubtitlesError.statusError(status.msg)))
                 }
-            case .Failure(let error):
-                onComplete(Result.Failure(OpenSubtitlesError.RequestError(error)))
+            case .failure(let error):
+                onComplete(Result.failure(OpenSubtitlesError.requestError(error as NSError)))
             }
         })
     }
     
-    func searchSubtitle(hash: String, _ size: UInt64, _ lang: String, onComplete: Result<String, OpenSubtitlesError> -> Void) {
+    func searchSubtitle(_ hash: String, _ size: UInt64, _ lang: String, onComplete: @escaping (Result<String>) -> Void) {
         if self.token == "" {
-            onComplete(Result.Failure(OpenSubtitlesError.NotLoggedIn))
+            onComplete(Result.failure(OpenSubtitlesError.notLoggedIn))
             return
         }
         
-        let params = ["moviehash": hash, "moviesize": size] as XMLRPCStructure
-        self.request(.SearchSubtitles, [self.token, [params] as XMLRPCArray], onComplete: { response in
+        let params: [String: Any] = ["moviehash": hash, "moviesize": size]
+
+        self.request(.SearchSubtitles, [self.token, [params]], onComplete: { response in
             switch response.result {
-            case .Success(let node):
+            case .success(let node):
                 let status = self.status(node)
                 if status.success {
                     let data = node[0]["data"]
                     if let link = self.findSubtitle(data, lang) {
-                        onComplete(Result.Success(link))
+                        onComplete(Result.success(link))
                         return
                     }
 
-                    onComplete(Result.Failure(OpenSubtitlesError.Empty))
+                    onComplete(Result.failure(OpenSubtitlesError.empty))
                 } else {
-                    onComplete(Result.Failure(OpenSubtitlesError.StatusError(status.msg)))
+                    onComplete(Result.failure(OpenSubtitlesError.statusError(status.msg)))
                 }
-            case .Failure(let error):
-                onComplete(Result.Failure(OpenSubtitlesError.RequestError(error)))
+            case .failure(let error):
+                onComplete(Result.failure(OpenSubtitlesError.requestError(error as NSError)))
             }
         })
     }
 
-    private func findSubtitle(subtitles: XMLRPCNode, _ lang: String) -> String? {
-        for i in 0..<subtitles.count! {
+    fileprivate func findSubtitle(_ subtitles: XMLRPCNode, _ lang: String) -> String? {
+        for i in 0..<subtitles.count {
             let sub = subtitles[i]
             if sub["ISO639"].string! == lang {
                 return sub["SubDownloadLink"].string!
@@ -90,14 +91,14 @@ class OpenSubtitlesClient: NSObject {
         return nil
     }
 
-    private func status(root: XMLRPCNode) -> Status {
+    fileprivate func status(_ root: XMLRPCNode) -> Status {
         let status = root[0]["status"].string!
-        let statusCode = Int(status.componentsSeparatedByString(" ")[0])!
+        let statusCode = Int(status.components(separatedBy: " ")[0])!
         return Status(code: statusCode, msg: status)
     }
 
-    private func request(method: Method, _ params: [Any], onComplete: Response<XMLRPCNode, NSError> -> Void)  {
-        AlamofireXMLRPC.request(OpenSubtitlesApi, methodName:method.rawValue, parameters:params).responseXMLRPC(onComplete)
+    fileprivate func request(_ method: Method, _ params: [Any], onComplete: @escaping (DataResponse<XMLRPCNode>) -> Void)  {
+        AlamofireXMLRPC.request(OpenSubtitlesApi, methodName:method.rawValue, parameters:params).responseXMLRPC(completionHandler: onComplete)
     }
     
 }

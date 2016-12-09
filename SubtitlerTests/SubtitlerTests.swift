@@ -13,19 +13,19 @@ class SubtitlerTests: XCTestCase {
     func testDownloadSubtitles() {
         let path = "YOUR FILE PATH HERE"
         let expectedPath = "YOUR EXPECTED FILE PATH HERE"
-        let ready = expectationWithDescription("ready")
+        let ready = expectation(description: "ready")
         let cli = Subtitler(lang: "es", userAgent: "OSTestUserAgent")
         cli.download(path) { result in
             switch result {
-            case .Success(let path):
+            case .success(let path):
                 XCTAssertEqual(path, expectedPath)
-            case .Failure(let err):
+            case .failure(let err):
                 XCTAssertNil(err)
             }
             ready.fulfill()
         }
 
-        waitForExpectationsWithTimeout(25, handler: { error in
+        waitForExpectations(timeout: 25, handler: { error in
             XCTAssertNil(error, "Error")
         })
     }

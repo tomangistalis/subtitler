@@ -2,32 +2,32 @@ import Foundation
 import Alamofire
 import GZIP
 
-public enum SubtitlerError: ErrorType {
-    case UnableToWrite, UnknownError, NotReady, UnableToGetHash, UnzipError
-    case ClientError(_: OpenSubtitlesError)
-    case DownloadError(_: NSError)
+public enum SubtitlerError: Error {
+    case unableToWrite, unknownError, notReady, unableToGetHash, unzipError
+    case clientError(_: OpenSubtitlesError)
+    case downloadError(_: NSError)
 }
 
-private func unzip(data: NSData, to: String) -> Bool {
-    if !data.isGzippedData() {
+private func unzip(_ data: Data, to: String) -> Bool {
+    if !(data as NSData).isGzippedData() {
         return false
     }
 
-    if let content = data.gunzippedData() {
-        return content.writeToFile(to, atomically: true)
+    if let content = (data as NSData).gunzipped() {
+        return ((try? content.write(to: URL(fileURLWithPath: to), options: [.atomic])) != nil)
     } else {
         return false
     }
 }
 
-public func subtitlesPath(path: String) -> String {
-    if let idx = path.characters.reverse().indexOf(".") {
+public func subtitlesPath(_ path: String) -> String {
+    if let idx = path.characters.reversed().index(of: ".") {
         return path[path.startIndex ..< idx.base] + "srt"
     }
     return path + ".srt"
 }
 
-public class Subtitler: NSObject {
+open class Subtitler: NSObject {
     var lang: String
     var userAgent: String
     var client: OpenSubtitlesClient
@@ -39,59 +39,60 @@ public class Subtitler: NSObject {
         self.client = OpenSubtitlesClient(userAgent: userAgent, lang: lang)
     }
 
-    private func login(onComplete: OpenSubtitlesError? -> Void) {
+    fileprivate func login(_ onComplete: @escaping (OpenSubtitlesError?) -> Void) {
         self.client.login { result in
             switch result {
-            case .Success(_):
+            case .success(_):
                 self.loggedIn = true
                 onComplete(nil)
-            case .Failure(let error):
-                onComplete(error)
+            case .failure(let error):
+                onComplete(error as? OpenSubtitlesError)
             }
         }
     }
 
-    private func downloadSubtitlesFile(url: String, _ path: String, _ onComplete: Result<String, SubtitlerError> -> Void) {
-        Alamofire.request(.GET, url).response { (_, _, data, error) in
-            if error != nil {
-                onComplete(Result.Failure(SubtitlerError.DownloadError(error!)))
-            } else if data != nil {
-                if unzip(data!, to: path) {
-                    onComplete(Result.Success(path))
+    fileprivate func downloadSubtitlesFile(_ url: String, _ path: String, _ onComplete: @escaping (Result<String>) -> Void) {
+        let urlRequest = try! URLRequest(url: url, method: .get)
+
+        Alamofire.request(urlRequest).responseData { dataResponse in
+            switch dataResponse.result {
+            case .success(let data):
+                if unzip(data, to: path) {
+                    onComplete(Result.success(path))
                 } else {
-                    onComplete(Result.Failure(SubtitlerError.UnzipError))
+                    onComplete(Result.failure(SubtitlerError.unzipError))
                 }
-            } else {
-                onComplete(Result.Failure(SubtitlerError.UnknownError))
+            case .failure(let error):
+                onComplete(Result.failure(SubtitlerError.downloadError(error as NSError)))
             }
         }
     }
 
-    private func searchSubtitles(path: String, _ lang: String, _ onComplete: Result<String, SubtitlerError> -> Void) {
+    fileprivate func searchSubtitles(_ path: String, _ lang: String, _ onComplete: @escaping (Result<String>) -> Void) {
         if let fh = fileHash(path) {
             self.client.searchSubtitle(fh.hash, fh.size, lang) { result in
                 switch result {
-                case .Success(let url):
+                case .success(let url):
                     let finalPath = subtitlesPath(path)
                     self.downloadSubtitlesFile(url, finalPath, onComplete)
-                case .Failure(let error):
-                    onComplete(Result.Failure(SubtitlerError.ClientError(error)))
+                case .failure(let error):
+                    onComplete(Result.failure(SubtitlerError.clientError(error as! OpenSubtitlesError)))
                 }
             }
         } else {
-            onComplete(Result.Failure(SubtitlerError.UnableToGetHash))
+            onComplete(Result.failure(SubtitlerError.unableToGetHash))
         }
     }
 
-    public func download(path: String, onComplete: Result<String, SubtitlerError> -> Void) {
+    open func download(_ path: String, onComplete: @escaping (Result<String>) -> Void) {
         download(path, lang: self.lang, onComplete: onComplete)
     }
 
-    public func download(path: String, lang: String, onComplete: Result<String, SubtitlerError> -> Void) {
+    open func download(_ path: String, lang: String, onComplete: @escaping (Result<String>) -> Void) {
         if !self.loggedIn {
             self.login { err in
                 if let error = err {
-                    onComplete(Result.Failure(SubtitlerError.ClientError(error)))
+                    onComplete(Result.failure(SubtitlerError.clientError(error)))
                 } else {
                     self.searchSubtitles(path, lang, onComplete)
                 }

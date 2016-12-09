@@ -4,8 +4,8 @@ import XCTest
 
 class FileHashTests: XCTestCase {
     
-    func file(name: String) -> String {
-        return NSBundle(forClass: FileHashTests.self).resourcePath! + name
+    func file(_ name: String) -> String {
+        return Bundle(for: FileHashTests.self).resourcePath! + name
     }
     
     override func setUp() {
@@ -15,14 +15,14 @@ class FileHashTests: XCTestCase {
         for _ in 1...105536 {
             txt += "a"
         }
-        try! txt.writeToFile(file, atomically: true, encoding: NSUTF8StringEncoding)
+        try! txt.write(toFile: file, atomically: true, encoding: String.Encoding.utf8)
     }
     
     override func tearDown() {
         super.tearDown()
         let file = self.file("f1.txt")
-        let fileManager = NSFileManager.defaultManager()
-        try! fileManager.removeItemAtPath(file)
+        let fileManager = FileManager.default
+        try! fileManager.removeItem(atPath: file)
     }
     
     func testHashFile() {
