@@ -1,7 +1,7 @@
 use_frameworks!
 
 target 'Subtitler' do
-    pod 'AlamofireXMLRPC', :git => 'https://github.com/kodlian/AlamofireXMLRPC.git'
+    pod 'AlamofireXMLRPC', :git => 'https://github.com/tommy071/AlamofireXMLRPC.git'
     pod 'GZIP', '1.1.1'
 end
 
